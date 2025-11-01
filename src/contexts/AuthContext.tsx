@@ -119,6 +119,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         full_name: fullName,
       });
 
+      // Assign default customer role
+      await supabase.from('user_roles').insert([{
+        user_id: data.user.id,
+        role: 'customer'
+      }]);
+
       await supabase.from('customers').insert({
         user_id: data.user.id,
         email: email,
