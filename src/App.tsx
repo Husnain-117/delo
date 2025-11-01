@@ -10,6 +10,10 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
 import MenuManagement from "./pages/admin/MenuManagement";
 import OrderManagement from "./pages/admin/OrderManagement";
+import InventoryManagement from "./pages/admin/InventoryManagement";
+import StaffManagement from "./pages/admin/StaffManagement";
+import CustomerManagement from "./pages/admin/CustomerManagement";
+import ReservationManagement from "./pages/admin/ReservationManagement";
 import KitchenDashboard from "./pages/kitchen/KitchenDashboard";
 import WaiterDashboard from "./pages/waiter/WaiterDashboard";
 import CustomerHome from "./pages/customer/CustomerHome";
@@ -33,6 +37,10 @@ const App = () => (
               <Route index element={<AdminDashboard />} />
               <Route path="orders" element={<OrderManagement />} />
               <Route path="menu" element={<MenuManagement />} />
+              <Route path="inventory" element={<InventoryManagement />} />
+              <Route path="staff" element={<StaffManagement />} />
+              <Route path="customers" element={<CustomerManagement />} />
+              <Route path="reservations" element={<ReservationManagement />} />
             </Route>
 
             {/* Kitchen Route */}
