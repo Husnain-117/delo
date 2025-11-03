@@ -142,9 +142,8 @@ export default function CustomerOrders() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6">
-        <h1 className="text-3xl font-bold mb-6">My Orders</h1>
+    <div>
+      <h1 className="text-3xl font-bold mb-6">My Orders</h1>
 
         <Tabs defaultValue="active" className="space-y-6">
           <TabsList>
@@ -184,7 +183,6 @@ export default function CustomerOrders() {
             )}
           </TabsContent>
         </Tabs>
-      </div>
     </div>
   );
 }

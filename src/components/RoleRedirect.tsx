@@ -12,36 +12,33 @@ const ROLE_PATHS: Record<string, string> = {
 };
 
 /**
- * RoleSelection page - Legacy redirect component
- * Users should not reach here, they will be redirected:
+ * Component that redirects users based on their role status:
  * - No role → ProfileCompletion
  * - Has role → Their role's panel
  */
-export default function RoleSelection() {
+export function RoleRedirect() {
   const navigate = useNavigate();
   const { user, userRole, loading } = useAuth();
 
-  // Redirect users without role to profile completion
   useEffect(() => {
-    if (!loading && !userRole && user) {
-      navigate('/profile-completion', { replace: true });
+    if (loading) return;
+
+    if (!user) {
+      navigate('/auth', { replace: true });
+      return;
     }
+
+    if (!userRole) {
+      // User is authenticated but has no role → Profile completion
+      navigate('/profile-completion', { replace: true });
+      return;
+    }
+
+    // User has a role → Redirect to their panel
+    const path = ROLE_PATHS[userRole] || '/';
+    navigate(path, { replace: true });
   }, [user, userRole, loading, navigate]);
 
-  // Redirect users with role to their panel
-  useEffect(() => {
-    if (!loading && userRole) {
-      const path = ROLE_PATHS[userRole] || '/';
-      navigate(path, { replace: true });
-    }
-  }, [userRole, loading, navigate]);
-
-  if (!user) {
-    navigate('/auth', { replace: true });
-    return null;
-  }
-
-  // Show loading state while fetching role or redirecting
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
@@ -51,3 +48,4 @@ export default function RoleSelection() {
     </div>
   );
 }
+

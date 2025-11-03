@@ -9,8 +9,9 @@ interface AuthContextType {
   userRole: string | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, role: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
+  refreshRole: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,16 +32,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user) {
           // Fetch user role
-          setTimeout(async () => {
-            const { data: roles } = await supabase
+          const fetchRole = async () => {
+            // First check user_roles table
+            const { data: roles, error } = await supabase
               .from('user_roles')
               .select('role')
               .eq('user_id', session.user.id)
-              .limit(1)
-              .maybeSingle();
+              .single();
             
-            setUserRole(roles?.role ?? 'customer');
-          }, 0);
+            if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+              console.error('❌ Role fetch error:', error);
+              // If no role found, check if user is a customer
+              const { data: customer } = await supabase
+                .from('customers')
+                .select('id')
+                .eq('user_id', session.user.id)
+                .single();
+              
+              if (customer) {
+                setUserRole('customer');
+              } else {
+                setUserRole(null);
+              }
+            } else if (roles?.role) {
+              console.log('🔍 Fetched role from DB:', roles.role);
+              setUserRole(roles.role);
+            } else {
+              // No role in user_roles, check if customer
+              const { data: customer } = await supabase
+                .from('customers')
+                .select('id')
+                .eq('user_id', session.user.id)
+                .single();
+              
+              if (customer) {
+                setUserRole('customer');
+              } else {
+                setUserRole(null);
+              }
+            }
+          };
+          fetchRole();
         } else {
           setUserRole(null);
         }
@@ -53,17 +85,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        setTimeout(async () => {
-          const { data: roles } = await supabase
+        const fetchRole = async () => {
+          // First check user_roles table
+          const { data: roles, error } = await supabase
             .from('user_roles')
             .select('role')
             .eq('user_id', session.user.id)
-            .limit(1)
-            .maybeSingle();
+            .single();
           
-          setUserRole(roles?.role ?? 'customer');
+          if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+            console.error('❌ Role fetch error:', error);
+            // If no role found, check if user is a customer
+            const { data: customer } = await supabase
+              .from('customers')
+              .select('id')
+              .eq('user_id', session.user.id)
+              .single();
+            
+            if (customer) {
+              setUserRole('customer');
+            } else {
+              setUserRole(null);
+            }
+          } else if (roles?.role) {
+            console.log('🔍 Initial role fetch:', roles.role);
+            setUserRole(roles.role);
+          } else {
+            // No role in user_roles, check if customer
+            const { data: customer } = await supabase
+              .from('customers')
+              .select('id')
+              .eq('user_id', session.user.id)
+              .single();
+            
+            if (customer) {
+              setUserRole('customer');
+            } else {
+              setUserRole(null);
+            }
+          }
           setLoading(false);
-        }, 0);
+        };
+        fetchRole();
       } else {
         setLoading(false);
       }
@@ -89,63 +152,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
+  const signUp = async (email: string, password: string, fullName: string, _role: string) => {
+    // Create auth user - email confirmation disabled for now
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        },
+        data: { full_name: fullName },
+        emailRedirectTo: undefined, // No email redirect needed
       },
     });
 
     if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       return { error };
     }
 
-    // Create profile and customer record
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        full_name: fullName,
-      });
-
-      // Assign default customer role
-      await supabase.from('user_roles').insert([{
-        user_id: data.user.id,
-        role: 'customer'
-      }]);
-
-      await supabase.from('customers').insert({
-        user_id: data.user.id,
-        email: email,
-      });
-
-      toast({
-        title: "Success",
-        description: "Account created successfully! Please sign in.",
-      });
+    if (!data.user) {
+      return { error: { message: "User creation failed" } };
     }
 
-    return { error };
+    // NOTE: Email verification is disabled for development
+    // Make sure to disable "Confirm email" in Supabase Dashboard:
+    // Authentication → Providers → Email → Toggle "Confirm email" OFF
+    
+    // Create profile - user can proceed immediately without email confirmation
+    await supabase.from('profiles').insert({
+      id: data.user.id,
+      full_name: fullName,
+    });
+
+    toast({
+      title: "Success",
+      description: "Account created successfully! Complete your profile to continue.",
+    });
+
+    return { error: null };
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
     setUserRole(null);
   };
 
+  const refreshRole = async () => {
+    if (!user) {
+      setUserRole(null);
+      return;
+    }
+
+    // First check user_roles table
+    const { data: roles, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('Role refresh error:', error);
+      // If no role found, check if user is a customer
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (customer) {
+        setUserRole('customer');
+      } else {
+        setUserRole(null);
+      }
+    } else if (roles?.role) {
+      setUserRole(roles.role);
+    } else {
+      // No role in user_roles, check if customer
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (customer) {
+        setUserRole('customer');
+      } else {
+        setUserRole(null);
+      }
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, userRole, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, userRole, loading, signIn, signUp, signOut, refreshRole }}>
       {children}
     </AuthContext.Provider>
   );

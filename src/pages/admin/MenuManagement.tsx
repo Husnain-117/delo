@@ -31,6 +31,7 @@ export default function MenuManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -65,11 +66,11 @@ export default function MenuManagement() {
     }
   };
 
-  const handleAddItem = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmitItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
-    const { error } = await supabase.from('menu_items').insert({
+    const itemData = {
       name: formData.get('name') as string,
       description: formData.get('description') as string,
       category_id: formData.get('category_id') as string,
@@ -77,7 +78,21 @@ export default function MenuManagement() {
       cost_price: formData.get('cost_price') ? parseFloat(formData.get('cost_price') as string) : null,
       prep_time_minutes: parseInt(formData.get('prep_time') as string),
       is_available: true,
-    });
+    };
+
+    let error;
+    if (editingItem) {
+      // Update existing item
+      const result = await supabase
+        .from('menu_items')
+        .update(itemData)
+        .eq('id', editingItem.id);
+      error = result.error;
+    } else {
+      // Insert new item
+      const result = await supabase.from('menu_items').insert(itemData);
+      error = result.error;
+    }
 
     if (error) {
       toast({
@@ -88,11 +103,40 @@ export default function MenuManagement() {
     } else {
       toast({
         title: "Success",
-        description: "Menu item added successfully",
+        description: editingItem ? "Menu item updated successfully" : "Menu item added successfully",
       });
       setIsDialogOpen(false);
+      setEditingItem(null);
       fetchMenuItems();
     }
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+
+    const { error } = await supabase
+      .from('menu_items')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: "Menu item deleted successfully",
+      });
+      fetchMenuItems();
+    }
+  };
+
+  const handleEditItem = (item: any) => {
+    setEditingItem(item);
+    setIsDialogOpen(true);
   };
 
   const filteredItems = menuItems.filter((item) => {
@@ -108,29 +152,32 @@ export default function MenuManagement() {
           <h1 className="text-3xl font-bold">Menu Management</h1>
           <p className="text-muted-foreground">Manage your restaurant menu items</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) setEditingItem(null);
+        }}>
           <DialogTrigger asChild>
             <Button size="lg">
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-2 h-5 w-5" />
               Add Menu Item
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Add New Menu Item</DialogTitle>
+              <DialogTitle>{editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}</DialogTitle>
               <DialogDescription>
-                Create a new item for your menu
+                {editingItem ? 'Update the menu item details' : 'Create a new item for your menu'}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleAddItem} className="space-y-4">
+            <form onSubmit={handleSubmitItem} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Item Name *</Label>
-                  <Input id="name" name="name" required />
+                  <Input id="name" name="name" defaultValue={editingItem?.name} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="category_id">Category *</Label>
-                  <Select name="category_id" required>
+                  <Select name="category_id" defaultValue={editingItem?.category_id} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
@@ -146,7 +193,7 @@ export default function MenuManagement() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea id="description" name="description" rows={3} />
+                <Textarea id="description" name="description" rows={3} defaultValue={editingItem?.description} />
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -157,6 +204,7 @@ export default function MenuManagement() {
                     type="number"
                     step="0.01"
                     min="0"
+                    defaultValue={editingItem?.price}
                     required
                   />
                 </div>
@@ -168,6 +216,7 @@ export default function MenuManagement() {
                     type="number"
                     step="0.01"
                     min="0"
+                    defaultValue={editingItem?.cost_price}
                   />
                 </div>
                 <div className="space-y-2">
@@ -177,7 +226,7 @@ export default function MenuManagement() {
                     name="prep_time"
                     type="number"
                     min="1"
-                    defaultValue="15"
+                    defaultValue={editingItem?.prep_time_minutes || 15}
                   />
                 </div>
               </div>
@@ -185,7 +234,7 @@ export default function MenuManagement() {
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">Add Item</Button>
+                <Button type="submit">{editingItem ? 'Update Item' : 'Add Item'}</Button>
               </div>
             </form>
           </DialogContent>
@@ -251,10 +300,10 @@ export default function MenuManagement() {
                     </p>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <Button size="icon" variant="ghost">
+                    <Button size="icon" variant="ghost" onClick={() => handleEditItem(item)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="text-destructive">
+                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteItem(item.id)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

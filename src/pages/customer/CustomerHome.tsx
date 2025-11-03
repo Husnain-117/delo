@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, Calendar, Award, History, ArrowRight, Sparkles } from 'lucide-react';
+import { ShoppingBag, Calendar, Award, History, ArrowRight } from 'lucide-react';
 
 export default function CustomerHome() {
   const [customerData, setCustomerData] = useState<any>(null);

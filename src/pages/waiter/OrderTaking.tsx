@@ -1,15 +1,22 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Search, Plus, Minus, ShoppingCart, X } from 'lucide-react';
 
 export default function OrderTaking() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -17,12 +24,14 @@ export default function OrderTaking() {
   const [cart, setCart] = useState<any[]>([]);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedTable, setSelectedTable] = useState<any>(null);
+  const [selectedTable, setSelectedTable] = useState<any>(location.state?.table || null);
+  const [tables, setTables] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchMenuItems();
     fetchCategories();
+    fetchAvailableTables();
   }, []);
 
   const fetchMenuItems = async () => {
@@ -45,6 +54,15 @@ export default function OrderTaking() {
       .select('*')
       .order('display_order');
     setCategories(data || []);
+  };
+
+  const fetchAvailableTables = async () => {
+    const { data } = await supabase
+      .from('tables')
+      .select('*')
+      .eq('status', 'available')
+      .order('table_number');
+    setTables(data || []);
   };
 
   const filteredItems = menuItems.filter(item => {
@@ -101,50 +119,67 @@ export default function OrderTaking() {
       return;
     }
 
-    const subtotal = getTotalAmount();
-    const taxAmount = subtotal * 0.1; // 10% tax
-    const serviceCharge = subtotal * 0.05; // 5% service charge
-    const totalAmount = subtotal + taxAmount + serviceCharge;
+    try {
+      const subtotal = getTotalAmount();
+      const taxAmount = subtotal * 0.1; // 10% tax
+      const serviceCharge = subtotal * 0.05; // 5% service charge
+      const totalAmount = subtotal + taxAmount + serviceCharge;
 
-    const { data: orderData, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        table_id: selectedTable.id,
-        order_type: 'dine_in',
-        status: 'pending',
-        subtotal,
-        tax_amount: taxAmount,
-        service_charge: serviceCharge,
-        total_amount: totalAmount,
-        order_number: `ORD-${Date.now()}`
-      })
-      .select()
-      .single();
+      // Generate order number
+      const { data: orderNumber, error: orderNumberError } = await supabase
+        .rpc('generate_order_number');
 
-    if (orderError) {
-      toast({ title: 'Error', description: orderError.message, variant: 'destructive' });
-      return;
-    }
+      if (orderNumberError) throw orderNumberError;
 
-    const orderItems = cart.map(item => ({
-      order_id: orderData.id,
-      menu_item_id: item.id,
-      quantity: item.quantity,
-      unit_price: item.price,
-      item_total: item.price * item.quantity,
-      special_instructions: item.special_instructions || null
-    }));
+      // Create order with waiter_id
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          order_number: orderNumber,
+          waiter_id: user?.id,
+          table_id: selectedTable.id,
+          order_type: 'dine_in',
+          status: 'pending',
+          payment_method: 'cash',
+          payment_status: 'pending',
+          subtotal,
+          tax_amount: taxAmount,
+          service_charge: serviceCharge,
+          total_amount: totalAmount
+        })
+        .select()
+        .single();
 
-    const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItems);
+      if (orderError) throw orderError;
 
-    if (itemsError) {
-      toast({ title: 'Error', description: itemsError.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Success', description: 'Order placed successfully!' });
+      // Create order items
+      const orderItems = cart.map(item => ({
+        order_id: orderData.id,
+        menu_item_id: item.id,
+        quantity: item.quantity,
+        unit_price: item.price,
+        item_total: item.price * item.quantity,
+        special_instructions: item.special_instructions || null
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // Update table status
+      await supabase
+        .from('tables')
+        .update({ status: 'occupied', current_order_id: orderData.id })
+        .eq('id', selectedTable.id);
+
+      toast({ title: 'Success!', description: `Order ${orderNumber} placed successfully!` });
       setCart([]);
       setSelectedTable(null);
+      navigate('/waiter/orders');
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
   };
 

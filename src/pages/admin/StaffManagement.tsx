@@ -32,19 +32,49 @@ export default function StaffManagement() {
   }, []);
 
   const fetchStaff = async () => {
-    const { data, error } = await supabase
-      .from('staff')
-      .select(`
-        *,
-        profiles:user_id (full_name, phone),
-        user_roles!inner (role)
-      `)
-      .order('created_at', { ascending: false });
+    try {
+      // Fetch staff records
+      const { data: staffData, error: staffError } = await supabase
+        .from('staff')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) {
+      if (staffError) throw staffError;
+
+      if (!staffData || staffData.length === 0) {
+        setStaff([]);
+        return;
+      }
+
+      // Fetch profiles and roles for each staff member
+      const enrichedStaff = await Promise.all(
+        staffData.map(async (member) => {
+          // Get profile
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, phone')
+            .eq('id', member.user_id)
+            .single();
+
+          // Get role
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', member.user_id)
+            .single();
+
+          return {
+            ...member,
+            profiles: profile || null,
+            user_roles: roleData || null,
+          };
+        })
+      );
+
+      setStaff(enrichedStaff);
+    } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      setStaff(data || []);
+      setStaff([]);
     }
   };
 

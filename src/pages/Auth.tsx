@@ -31,6 +31,7 @@ export default function Auth() {
     setIsLoading(false);
 
     if (!error) {
+      // Will redirect based on role in App.tsx routing logic
       navigate('/');
     }
   };
@@ -44,13 +45,12 @@ export default function Auth() {
     const password = formData.get('signup-password') as string;
     const fullName = formData.get('full-name') as string;
 
-    const { error } = await signUp(email, password, fullName);
+    const { error } = await signUp(email, password, fullName, '');
     setIsLoading(false);
 
     if (!error) {
-      // Switch to login tab after successful signup
-      const loginTab = document.querySelector('[value="login"]') as HTMLButtonElement;
-      loginTab?.click();
+      // Redirect to profile completion after successful signup
+      navigate('/profile-completion');
     }
   };
 

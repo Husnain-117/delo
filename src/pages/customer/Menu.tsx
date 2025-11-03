@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,14 +17,19 @@ export default function CustomerMenu() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [cart, setCart] = useState<any[]>([]);
+  const [cartCount, setCartCount] = useState(0);
+  const [cartTotal, setCartTotal] = useState(0);
   const { toast } = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchMenuItems();
     fetchCategories();
-  }, []);
+    if (user) {
+      fetchCartCount();
+    }
+  }, [user]);
 
   const fetchMenuItems = async () => {
     const { data, error } = await supabase
@@ -47,86 +53,118 @@ export default function CustomerMenu() {
     setCategories(data || []);
   };
 
+  const fetchCartCount = async () => {
+    const { data, error } = await (supabase as any)
+      .from('cart_items')
+      .select(`
+        quantity,
+        menu_items:menu_item_id (price)
+      `)
+      .eq('user_id', user?.id);
+
+    if (!error && data) {
+      const count = data.reduce((sum: number, item: any) => sum + item.quantity, 0);
+      const total = data.reduce((sum: number, item: any) => {
+        const price = item.menu_items?.price || 0;
+        return sum + (price * item.quantity);
+      }, 0);
+      setCartCount(count);
+      setCartTotal(total);
+    }
+  };
+
   const filteredItems = menuItems.filter(item => {
     const matchesCategory = selectedCategory === 'all' || item.category_id === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const addToCart = (item: any) => {
-    const existingItem = cart.find(cartItem => cartItem.id === item.id);
-    if (existingItem) {
-      setCart(cart.map(cartItem =>
-        cartItem.id === item.id
-          ? { ...cartItem, quantity: cartItem.quantity + 1 }
-          : cartItem
-      ));
-    } else {
-      setCart([...cart, { ...item, quantity: 1 }]);
+  const addToCart = async (item: any) => {
+    if (!user) {
+      toast({ title: 'Error', description: 'Please sign in to add items to cart', variant: 'destructive' });
+      return;
     }
-    toast({ title: 'Success', description: `${item.name} added to cart` });
+
+    try {
+      // Check if item already exists in cart
+      const { data: existingItem } = await (supabase as any)
+        .from('cart_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('menu_item_id', item.id)
+        .maybeSingle();
+
+      if (existingItem) {
+        // Update quantity
+        const { error } = await (supabase as any)
+          .from('cart_items')
+          .update({ 
+            quantity: existingItem.quantity + 1,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingItem.id);
+
+        if (error) throw error;
+      } else {
+        // Insert new item
+        const { error } = await (supabase as any)
+          .from('cart_items')
+          .insert({
+            user_id: user.id,
+            menu_item_id: item.id,
+            quantity: 1
+          });
+
+        if (error) throw error;
+      }
+
+      toast({ title: 'Success', description: `${item.name} added to cart` });
+      fetchCartCount();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
   };
 
-  const getCartTotal = () => {
-    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold">Our Menu</h1>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/customer/cart')}
-              className="relative"
-            >
-              <ShoppingCart className="h-5 w-5" />
-              {cart.length > 0 && (
-                <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0">
-                  {cart.length}
-                </Badge>
-              )}
-              <span className="ml-2">${getCartTotal().toFixed(2)}</span>
-            </Button>
-          </div>
+    <div>
+      <h1 className="text-2xl font-bold mb-6">Our Menu</h1>
+      
+      {/* Search and Filters */}
+      <div className="space-y-4 mb-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search menu..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
 
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search menu..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          <Button
+            variant={selectedCategory === 'all' ? 'default' : 'outline'}
+            onClick={() => setSelectedCategory('all')}
+            size="sm"
+          >
+            All
+          </Button>
+          {categories.map((category) => (
             <Button
-              variant={selectedCategory === 'all' ? 'default' : 'outline'}
-              onClick={() => setSelectedCategory('all')}
+              key={category.id}
+              variant={selectedCategory === category.id ? 'default' : 'outline'}
+              onClick={() => setSelectedCategory(category.id)}
               size="sm"
             >
-              All
+              {category.name}
             </Button>
-            {categories.map((category) => (
-              <Button
-                key={category.id}
-                variant={selectedCategory === category.id ? 'default' : 'outline'}
-                onClick={() => setSelectedCategory(category.id)}
-                size="sm"
-              >
-                {category.name}
-              </Button>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
 
       {/* Menu Items */}
-      <div className="container mx-auto px-4 py-6">
+      <div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredItems.map((item) => (
             <Card

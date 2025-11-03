@@ -3,26 +3,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
-  ShoppingCart,
+  Plus,
+  ClipboardList,
+  TableProperties,
   UtensilsCrossed,
-  Package,
-  Users,
-  UserCircle,
-  Calendar,
-  BarChart3,
-  Settings,
   LogOut,
 } from 'lucide-react';
 
-export default function AdminLayout() {
+export default function WaiterLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
 
   const handleSignOut = async () => {
     try {
       await signOut();
-      // Force hard navigation to clear all state
       window.location.href = '/auth';
     } catch (error) {
       console.error('Sign out error:', error);
@@ -30,24 +25,24 @@ export default function AdminLayout() {
   };
 
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
-    { icon: ShoppingCart, label: 'Orders', path: '/admin/orders' },
-    { icon: UtensilsCrossed, label: 'Menu', path: '/admin/menu' },
-    { icon: Package, label: 'Inventory', path: '/admin/inventory' },
-    { icon: Users, label: 'Staff', path: '/admin/staff' },
-    { icon: UserCircle, label: 'Customers', path: '/admin/customers' },
-    { icon: Calendar, label: 'Reservations', path: '/admin/reservations' },
-    { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
-    { icon: Settings, label: 'Settings', path: '/admin/settings' },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/waiter' },
+    { icon: Plus, label: 'New Order', path: '/waiter/new-order' },
+    { icon: ClipboardList, label: 'My Orders', path: '/waiter/orders' },
+    { icon: TableProperties, label: 'Tables', path: '/waiter/tables' },
+    { icon: UtensilsCrossed, label: 'Menu', path: '/waiter/menu' },
   ];
 
   return (
-    <div className="min-h-screen flex bg-background dark">
+    <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
       <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
         <div className="p-6 border-b border-sidebar-border">
-          <h1 className="text-2xl font-bold text-sidebar-foreground">Admin Panel</h1>
-          <p className="text-xs text-sidebar-foreground/60 mt-1">Restaurant Management</p>
+          <h1 className="text-2xl font-bold text-sidebar-foreground">
+            Waiter Panel
+          </h1>
+          <p className="text-xs text-sidebar-foreground/60 mt-1">
+            {user?.email?.split('@')[0]}
+          </p>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
