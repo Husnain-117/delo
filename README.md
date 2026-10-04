@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🚀 [PROJECT NAME]
+# 🚀 DELO
 
-**[One-line tagline describing what your app does and who it's for.]**
+
 
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -37,8 +37,7 @@
 
 ## 📖 Overview
 
-[PROJECT NAME] is a modern, responsive web application built with React and TypeScript. [Describe the problem it solves, who it is for, and what makes it different, in 2-3 sentences.]
-
+DELO is a modern, responsive web application built with React and TypeScript. 
 The project focuses on:
 
 - **Performance:** fast builds and instant hot-reload powered by Vite
